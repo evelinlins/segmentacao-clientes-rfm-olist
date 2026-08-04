@@ -44,3 +44,10 @@ O fluxo de codigo esta dividido em 5 etapas principais:
 df_orders = pd.read_csv('olist_orders_dataset.csv')
 df_payments = pd.read_csv('olist_order_payments_dataset.csv')
 df_customers = pd.read_csv('olist_customers_dataset.csv')
+
+
+
+
+
+<img width="1600" height="880" alt="image" src="https://github.com/user-attachments/assets/fbc043ec-4216-4831-92a1-97b95bf0f00a" />
+
