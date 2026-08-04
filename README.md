@@ -47,7 +47,3 @@ df_customers = pd.read_csv('olist_customers_dataset.csv')
 
 
 
-
-
-<img width="1600" height="880" alt="image" src="https://github.com/user-attachments/assets/fbc043ec-4216-4831-92a1-97b95bf0f00a" />
-
