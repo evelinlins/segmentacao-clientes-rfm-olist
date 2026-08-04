@@ -1,46 +1,100 @@
-# Segmentacao de Clientes RFM - E-commerce Olist
+# ==============================================================================
+# Segmentação de Clientes RFM - Base Olist
+# Autor: Evelin Lins
+# Objetivo: Processar dados de e-commerce e classificar clientes por comportamento
+# ==============================================================================
 
-**Autor:** Evelin 
-**Papel:** Analista de Dados 
-**Tecnologias:** Python (Pandas, Seaborn, Matplotlib), Jupyter Notebook/Google Colab, Excel  
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
 
----
+# Configurações visuais
+sns.set(style="whitegrid")
+print("Framework estratégico inicializado com sucesso.")
 
-# Visao Geral do Projeto
-
-Este projeto tem como objetivo realizar um processo de **ETL (Extract, Transform, Load)** e **Data Analytics** sobre a base de dados publica do e-commerce Olist para criar uma **Single Customer View**. 
-
-A partir da unificacao de dados transacionais, cadastrais e de pagamentos, foi desenvolvida uma **Segmentacao RFM (Recencia, Frequencia e Monetario)**. A analise transforma dados brutos em inteligencia de negocios prescritiva, permitindo que times de Marketing e CRM tomem decisoes baseadas em ROI e Retencao.
-
----
-
-# Objetivos 
-
-1. **Tratamento & Consolidacao (ETL):** Integrar tabelas transacionais (`orders`, `payments`, `customers`) garantindo integridade e validacao de tipos de dados (`datetime`).
-2. **Modelagem RFM:**
-   * **Recencia (R):** Dias desde a ultima compra ate a data base.
-   * **Frequencia (F):** Quantidade total de ordens concluidas por cliente unico.
-   * **Monetario (M):** Valor total investido pelo cliente na plataforma.
-3. **Scoring & Clusterizacao:** Categorizacao por quintis (`qcut` e `rank`) para mapeamento de personas do negocio.
-4. **Planejamento Prescritivo:** Mapeamento do *Health Score* da base e definicao de reguas de comunicacao para CRM.
-
----
-
-# Stack Tecnologico & Arquitetura
-
-* **Python 3.x:** Linguagem principal do pipeline de dados.
-* **Pandas:** Manipulacao de dados, agrupamentos, juncoes (`merge`), engenharia de atributos e expressoes regulares (Regex).
-* **Matplotlib & Seaborn:** Visualizacao de dados e graficos de distribuicao/frequencia para exploracao analitica.
-* **OpenPyXL / Excel:** Exportacao do pipeline processado para consumo do time de negocios.
-
----
-
-# Estrutura do Pipeline & Codigo
-
-O fluxo de codigo esta dividido em 5 etapas principais:
-
-### 1. Carregamento e Auditoria (ETL)
-```python
+# 1. Carregamento dos dados (ETL)
 df_orders = pd.read_csv('olist_orders_dataset.csv')
 df_payments = pd.read_csv('olist_order_payments_dataset.csv')
 df_customers = pd.read_csv('olist_customers_dataset.csv')
+
+print(f"Ordens: {df_orders.shape}")
+print(f"Pagamentos: {df_payments.shape}")
+print(f"Clientes: {df_customers.shape}")
+
+# 2. Consolidação da Single Customer View
+df_com_valor = pd.merge(df_orders, df_payments, on='order_id')
+df_completo = pd.merge(df_com_valor, df_customers, on='customer_id')
+
+df_rfm = df_completo[['customer_unique_id', 'order_purchase_timestamp', 'payment_value']].copy()
+df_rfm.columns = ['ID_Cliente', 'Data_Compra', 'Valor']
+
+# 3. Tratamento de datas e cálculo das métricas RFM
+df_rfm['Data_Compra'] = pd.to_datetime(df_rfm['Data_Compra'])
+data_hoje = df_rfm['Data_Compra'].max() + pd.Timedelta(days=1)
+
+rfm = df_rfm.groupby('ID_Cliente').agg({
+    'Data_Compra': lambda x: (data_hoje - x.max()).days,  # Recência
+    'ID_Cliente': 'count',                                # Frequência
+    'Valor': 'sum'                                       # Monetário
+})
+
+rfm.columns = ['Recencia', 'Frequencia', 'Monetario']
+
+# 4. Cálculo dos Scores RFM por Quintis (qcut)
+rfm['R'] = pd.qcut(rfm['Recencia'], 5, labels=[5, 4, 3, 2, 1])
+rfm['F'] = rfm['Frequencia'].rank(method='first')
+rfm['F'] = pd.qcut(rfm['F'], 5, labels=[1, 2, 3, 4, 5])
+rfm['M'] = pd.qcut(rfm['Monetario'], 5, labels=[1, 2, 3, 4, 5])
+
+rfm['RFM_Score'] = rfm['R'].astype(str) + rfm['F'].astype(str) + rfm['M'].astype(str)
+
+# 5. Mapeamento de Segmentos / Personas via Regex
+segmentos_map = {
+    r'[1-2][1-2]': 'Perdidos',
+    r'[1-2][3-4]': 'Em Risco',
+    r'[1-2]5': 'Não posso perder',
+    r'3[1-2]': 'Prestes a dormir',
+    r'33': 'Precisa de atenção',
+    r'[3-4][4-5]': 'Clientes Fiéis',
+    r'41': 'Promissores',
+    r'51': 'Novos clientes',
+    r'[4-5][2-3]': 'Potencialmente fiéis',
+    r'5[4-5]': 'Campeões'
+}
+
+rfm['Segmento'] = rfm['R'].astype(str) + rfm['F'].astype(str)
+rfm['Segmento'] = rfm['Segmento'].replace(segmentos_map, regex=True)
+
+# 6. EXPORTAÇÃO DO ARQUIVO FINAL NO EXCEL
+rfm.to_excel("Resultado_Final_RFM_Evelin.xlsx")
+print("\nARQUIVO GERADO COM SUCESSO! Procure por 'Resultado_Final_RFM_Evelin.xlsx' na sua pasta.")
+
+# 7. Resumo Descritivo para Análise de Negócio
+print("\n--- RESUMO ESTRATÉGICO DA BASE DE CLIENTES ---")
+resumo = rfm.groupby('Segmento').agg({
+    'Recencia': 'mean',
+    'Frequencia': 'mean',
+    'Monetario': ['mean', 'count']
+}).round(2)
+
+resumo = resumo.sort_values(by=('Monetario', 'mean'), ascending=False)
+print(resumo)
+
+# 8. Visualizações de Dados
+# Gráfico 1: Recência
+plt.figure(figsize=(10, 6))
+sns.countplot(data=rfm, x='R', palette='viridis')
+plt.title('Distribuição dos Clientes por Nota de Recência (R)', fontsize=15)
+plt.xlabel('Nota de Recência (5 = Comprou Recentemente | 1 = Antigo)', fontsize=12)
+plt.ylabel('Quantidade de Clientes', fontsize=12)
+plt.show()
+
+# Gráfico 2: Segmentos
+plt.figure(figsize=(12, 8))
+ordem = rfm['Segmento'].value_counts().index
+sns.countplot(data=rfm, y='Segmento', order=ordem, palette='viridis')
+plt.title("Onde estão os nossos clientes? (Segmentação RFM)", fontsize=18)
+plt.xlabel("Quantidade de Clientes", fontsize=12)
+plt.ylabel("Segmentos Estratégicos", fontsize=12)
+plt.show()
